@@ -17,9 +17,9 @@ PATTERN_R2 = '{sample}.fastq.2.gz'
 
 rule touch_out:
     input:
-        expand('trimmed/trimmed-{sample}.fastq.{read}.gz', sample=FASTQ, read=READS)
+        expand('fastqc.dir/{sample}.{read}_fastqc.html', sample=FASTQ, read=READS)
     output:
-        'trimmed/test.txt'
+        'fastqc.dir/test.txt'
     shell:
         'echo {input} >> {output}'
 
@@ -28,6 +28,10 @@ rule touch_out:
 #######################################
         
 rule trim_adaptor:
+    """
+    Use trimmomatic to remove adaptor contamination and quality trim reads to a minimum length
+    NB: this should be user-configured to handle different read lengths and trimming parameter values
+    """
     input:
         R1 = os.path.join(FASTQ_DIR, PATTERN_R1),
         R2 = os.path.join(FASTQ_DIR, PATTERN_R2)
@@ -45,3 +49,19 @@ rule trim_adaptor:
         # control the paths to software binaries...
         """java -jar /nfs/software/marioni/Trimmomatic-0.36/trimmomatic-0.36.jar PE -threads {threads} -phred33 {input.R1} {input.R2} {output.R1} {output.R1}.unpaired {output.R2} {output.R2}.unpaired \
         ILLUMINACLIP:/nfs/software/marioni/Trimmomatic-0.36/adapters/TruSeq3-PE.fa:1:30:10:1 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:75"""
+
+
+#######################################
+## Run FastQC on trimmed FASTQ files ##
+#######################################
+rule run_fastqc:
+    """
+    Run FastQC to generate a html report with a selection of QC modules
+    """
+    input:
+        "trimmed/trimmed-{sample}.fastq.{read}.gz"
+    output:
+        "fastqc.dir/{sample}.{read}_fastqc.html"
+    threads: 4
+    shell:
+        "fastqc  -o fastqc.dir/  --noextract  --threads {threads}  --dir temp.dir/  {input}" 
