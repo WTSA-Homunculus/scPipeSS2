@@ -1,0 +1,4 @@
+# requirements file
+
+python >= 3.6
+snakemake >= 3.13
