@@ -34,8 +34,14 @@ rule trim_adaptor:
     output:
         R1 = "trimmed/trimmed-{sample}.fastq.1.gz",
         R2 = "trimmed/trimmed-{sample}.fastq.2.gz"
-    threads: 4
+    threads: 8
+    log:
+        "logs/trim_adaptor/{sample}.log"
     shell:
         # trimmomatic needs to be in the PATH variable ideally, and the adaptor sequences in a common location
+        # I think to make this as universal as possible I'll need to create a script that executes trimmomatic on
+        # the command line with the relevant options - still needs to know where the trimmomatic binary is though
+        # is this a job for conda?  Could we deploy this pipeline as a conda environment, that way we can
+        # control the paths to software binaries...
         """java -jar /nfs/software/marioni/Trimmomatic-0.36/trimmomatic-0.36.jar PE -threads {threads} -phred33 {input.R1} {input.R2} {output.R1} {output.R1}.unpaired {output.R2} {output.R2}.unpaired \
         ILLUMINACLIP:/nfs/software/marioni/Trimmomatic-0.36/adapters/TruSeq3-PE.fa:1:30:10:1 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:75"""
