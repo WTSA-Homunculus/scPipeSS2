@@ -1,0 +1,5 @@
+# This file contains a few issues and solutions as this pipeline line is developed
+
+* all binaries must be in the PATH variable
+* use a cluster.json cluster config file as it saves cluttering the Snakefile
+* use a conda install of Python and Snakemake <- make sure that the PYTHONPATH doesn't point to any system Python libraries (this was a source of a 6hour headache before resolving)
