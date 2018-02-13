@@ -1,0 +1,35 @@
+import os
+import glob
+
+# this Snakefile makes certain assumptions about the file directory structure
+# namely that there is a directory called fastq, that contains the fastq files
+# further these fastq files must themselves have a format <file_name>.fastq.1.gz
+
+FASTQ_DIR = "fastq/"
+
+FASTQ, = glob_wildcards(os.path.join(FASTQ_DIR, '{sample,[^/]+}.fastq.1.gz'))
+READS = [1, 2]
+PATTERN_R1 = '{sample}.fastq.1.gz'
+PATTERN_R2 = '{sample}.fastq.2.gz'
+
+
+rule touch_out:
+    input:
+        expand('trimmed/trimmed-{sample}.fastq.{read}.gz', sample=FASTQ, read=READS)
+    output:
+        'trimmed/test.txt'
+    shell:
+        'echo {input} >> {output}'
+
+rule trim_adaptor:
+    input:
+        R1 = os.path.join(FASTQ_DIR, PATTERN_R1),
+        R2 = os.path.join(FASTQ_DIR, PATTERN_R2)
+    threads: 4
+    output:
+        R1 = "trimmed/trimmed-{sample}.fastq.1.gz",
+        R2 = "trimmed/trimmed-{sample}.fastq.2.gz"
+    shell:
+        # trimmomatic needs to be in the PATH variable ideally, and the adaptor sequences in a common location
+        """java -jar /nfs/software/marioni/Trimmomatic-0.36/trimmomatic-0.36.jar PE -threads {threads} -phred33 {input.R1} {input.R2} {output.R1} {output.R1}.unpaired {output.R2} {output.R2}.unpaired \
+        ILLUMINACLIP:/nfs/software/marioni/Trimmomatic-0.36/adapters/TruSeq3-PE.fa:1:30:10:1 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:75"""
