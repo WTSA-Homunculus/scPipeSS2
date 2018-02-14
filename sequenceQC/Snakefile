@@ -17,7 +17,7 @@ PATTERN_R2 = '{sample}.fastq.2.gz'
 
 rule touch_out:
     input:
-        expand('fastqc.dir/{sample}.{read}_fastqc.html', sample=FASTQ, read=READS)
+        expand('fastqc.dir/trimmed-{sample}.fastq.{read}_fastqc.html', sample=FASTQ, read=READS)
     output:
         'fastqc.dir/test.txt'
     shell:
@@ -61,7 +61,7 @@ rule run_fastqc:
     input:
         "trimmed/trimmed-{sample}.fastq.{read}.gz"
     output:
-        "fastqc.dir/{sample}.{read}_fastqc.html"
-    threads: 4
+        "fastqc.dir/trimmed-{sample}.fastq.{read}_fastqc.html"
+    threads: 8
     shell:
         "fastqc  -o fastqc.dir/  --noextract  --threads {threads}  --dir temp.dir/  {input}" 
