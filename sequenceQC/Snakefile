@@ -65,3 +65,8 @@ rule run_fastqc:
     threads: 8
     shell:
         "fastqc  -o fastqc.dir/  --noextract  --threads {threads}  --dir temp.dir/  {input}" 
+
+### TODO: Compile a report that integrates the results from FastQC, with the input and output read numbers after adaptor trimming
+### Support user config file for adaptor trimming parameters
+
+
