@@ -9,7 +9,7 @@ import os
 # 	(2) featureCounts, (3) salmon
 #  snakemake --cluster "other"
 #  snakemake --cluster "qsub"
-#  snakemake -c 'qsub -V  -q igmm_long -pe sharedmem 8 -l h_vmem=8G -j y -cwd' --jobs=100
+#  snakemake -c 'qsub -V  -q igmm_long -pe sharedmem 8 -l h_vmem=8G -j y' --jobs=100
 #############################################################################
 configfile: "siteProfiles/configIGMM.yaml"
 configfile: "config.yaml"
@@ -116,21 +116,20 @@ rule star_align:
 	threads: 8
 	shell: 
 		"{params.starEX} --runThreadN {threads}  --genomeDir {starIndexPrefix} --readFilesIn {input.R1} {input.R2} --readFilesCommand {params.readFilesCommand} --outFileNamePrefix {params.prefix} --outSAMtype {params.outSAMtype} --outSAMattributes {params.outSAMattributes} --outSAMunmapped {params.outSAMunmapped} --quantMode {params.quantMode} "
-		#	os.system(command)
 
 #############################################################################
 # salmon
 #############################################################################
 rule salmon_counts:
-	input: bam="Aligned/{sample}.Aligned.sortedByCoord.out.bam" 
+	input: 
+		bam="Aligned/{sample}.Aligned.sortedByCoord.out.bam" 
 	output: "salmon_QUANT/{sample}/quant.sf"
 	threads: 8
 	params: 
 		salEX=config['SALMON'],
-		salStrand="IU",
-		anno={transcriptome}
+		salStrand="IU"
 	shell: """
-		{params.salEX} quant -t {anno} -l {params.salStrand} -p {threads} -a {input.bam} -o salmon_QUANT/{sample}
+		{params.salEX} quant -t {transcriptome} -l {params.salStrand} -p {threads} -a {input.bam} -o {output}
 	"""
 #############################################################################
 # featureCounts
