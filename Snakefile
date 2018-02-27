@@ -9,7 +9,7 @@ import os
 # 	(2) featureCounts, (3) salmon
 #  snakemake --cluster "other"
 #  snakemake --cluster "qsub"
-#  snakemake -c 'qsub -V  -q igmm_long -pe sharedmem 8 -l h_vmem=8G -j y' --jobs=100
+#  snakemake -c 'qsub -V  -q igmm_long -pe sharedmem 8 -l h_vmem=8G -j y -cwd' --jobs=100 >runLog_DATE 2>&1 &
 #############################################################################
 configfile: "siteProfiles/configIGMM.yaml"
 configfile: "config.yaml"
@@ -40,8 +40,8 @@ rule all:
 		expand("fastqs/rawdata/{sample}/{sample}_R2_001.fastq.gz",sample=SAMPLES),
 		expand("fastqs/QC/{sample}_R1_001_fastqc.html",sample=SAMPLES),
 		expand("fastqs/QC/{sample}_R2_001_fastqc.html",sample=SAMPLES),
-		expand("Aligned/{sample}.Aligned.sortedByCoord.out.bam",sample=SAMPLES),
-		expand("salmon_QUANT/{sample}/quant.sf",sample=SAMPLES)
+		expand("Aligned/{sample}.Aligned.toTranscriptome.out.bam",sample=SAMPLES),
+		expand("salmon_QUANT/{sample}_sf",sample=SAMPLES)
 
 #############################################################################
 # DIR Rule
@@ -58,17 +58,18 @@ rule run_fastqc:
 	Run FastQC to generate a html report with a selection of QC modules
 	"""
 	input:
-		R1="fastqs/rawdata/{sample}/{sample}_R1_001.fastq.gz",
-		R2="fastqs/rawdata/{sample}/{sample}_R2_001.fastq.gz"
+		"fastqs/rawdata/{sample}/{sample}_R1_001.fastq.gz",
+		"fastqs/rawdata/{sample}/{sample}_R2_001.fastq.gz"
 	output:
 		"fastqs/QC/{sample}_R1_001_fastqc.html",
 		"fastqs/QC/{sample}_R2_001_fastqc.html"
 	params:
-		qcEX=config['FQC']
+		qcEX=config['FQC'],
+		dir='/tmp'
 
 	threads: 8
 	shell:
-		"{params.qcEX}  -o fastqs/QC/  --noextract  --threads {threads}  --dir temp.dir/  {input}"
+		"{params.qcEX}  -o fastqs/QC/  --noextract  --threads {threads}  --dir {params.dir}  {input}"
 #############################################################################
 # Trim adaptor
 #############################################################################
@@ -104,7 +105,7 @@ rule star_align:
 		R1="Trimmed/{sample}_R1_001.fastq.gz",
 		R2="Trimmed/{sample}_R2_001.fastq.gz"
 	output:
-		"Aligned/{sample}.Aligned.sortedByCoord.out.bam"
+		"Aligned/{sample}.Aligned.toTranscriptome.out.bam"
 	params:
 		starEX=config['STAR'],
 		prefix = "Aligned/{sample}.",
@@ -122,8 +123,8 @@ rule star_align:
 #############################################################################
 rule salmon_counts:
 	input: 
-		bam="Aligned/{sample}.Aligned.sortedByCoord.out.bam" 
-	output: "salmon_QUANT/{sample}/quant.sf"
+		bam="Aligned/{sample}.Aligned.toTranscriptome.out.bam" 
+	output: "salmon_QUANT/{sample}_sf"
 	threads: 8
 	params: 
 		salEX=config['SALMON'],
@@ -135,7 +136,7 @@ rule salmon_counts:
 # featureCounts
 #############################################################################
 rule feature_counts:
-	input: anno="{annotation}", bam="Aligned/{sample}.Aligned.sortedByCoord.out.bam" 
+	input: anno="{annotation}", bam="Aligned/{sample}.Aligned.toTranscriptome.out.bam" 
 	output: "FC_QUANT/gene_counts.txt"
 	threads: 8
 	params: 
