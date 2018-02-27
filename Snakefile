@@ -9,7 +9,7 @@ import os
 # 	(2) featureCounts, (3) salmon
 #  snakemake --cluster "other"
 #  snakemake --cluster "qsub"
-#  snakemake -c 'qsub -V  -q igmm_long -pe sharedmem 8 -l h_vmem=8G' -j -cwd
+#  snakemake -c 'qsub -V  -q igmm_long -pe sharedmem 8 -l h_vmem=8G -j y -cwd' --jobs=100
 #############################################################################
 configfile: "siteProfiles/configIGMM.yaml"
 configfile: "config.yaml"
@@ -68,7 +68,7 @@ rule run_fastqc:
 
 	threads: 8
 	shell:
-		"{params.qcEX}  -o fastqs/rawdata/QC/  --noextract  --threads {threads}  --dir temp.dir/  {input}"
+		"{params.qcEX}  -o fastqs/QC/  --noextract  --threads {threads}  --dir temp.dir/  {input}"
 #############################################################################
 # Trim adaptor
 #############################################################################
@@ -107,7 +107,7 @@ rule star_align:
 		"Aligned/{sample}.Aligned.sortedByCoord.out.bam"
 	params:
 		starEX=config['STAR'],
-		prefix = "{sample}.",
+		prefix = "Aligned/{sample}.",
 		readFilesCommand = config['params']['star']['readFilesCommand'], 
 		outSAMtype = config['params']['star']['outSAMtype'],
 		outSAMattributes = config['params']['star']['outSAMattributes'],
