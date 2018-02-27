@@ -1,0 +1,3 @@
+cluster: qsub
+jobs: 100
+REF: /exports/igmm/eddie/ponting-lab/JTB/mm10-ERCC
