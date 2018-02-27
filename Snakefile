@@ -17,7 +17,7 @@ configfile: "config.yaml"
 
 starIndexPrefix = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_mm10']['starIndex'])
 annotation = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_mm10']['annotation'])
-transcriptome =  os.path.join(config['ref_mm10']['referenceFolder'],config['ref_mm10']['transcriptome'])
+transcriptome = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_mm10']['transcriptome'])
 
 
 BASE_DIR = "/exports/eddie/scratch/jbarang/"
@@ -104,7 +104,7 @@ rule star_align:
 		R1="Trimmed/{sample}_R1_001.fastq.gz",
 		R2="Trimmed/{sample}_R2_001.fastq.gz"
 	output:
-		"Aligned/{sample}Aligned.sortedByCoord.out.bam"
+		"Aligned/{sample}.Aligned.sortedByCoord.out.bam"
 	params:
 		starEX=config['STAR'],
 		prefix = "{sample}.",
@@ -122,12 +122,13 @@ rule star_align:
 # salmon
 #############################################################################
 rule salmon_counts:
-	input: anno="{transcriptome}", bam="Aligned/{sample}Aligned.sortedByCoord.out.bam" 
+	input: bam="Aligned/{sample}.Aligned.sortedByCoord.out.bam" 
 	output: "salmon_QUANT/{sample}/quant.sf"
 	threads: 8
 	params: 
 		salEX=config['SALMON'],
-		salStrand="IU"
+		salStrand="IU",
+		anno={transcriptome}
 	shell: """
 		{params.salEX} quant -t {anno} -l {params.salStrand} -p {threads} -a {input.bam} -o salmon_QUANT/{sample}
 	"""
@@ -135,7 +136,7 @@ rule salmon_counts:
 # featureCounts
 #############################################################################
 rule feature_counts:
-	input: anno="{annotation}", bam="Aligned/{sample}Aligned.sortedByCoord.out.bam" 
+	input: anno="{annotation}", bam="Aligned/{sample}.Aligned.sortedByCoord.out.bam" 
 	output: "FC_QUANT/gene_counts.txt"
 	threads: 8
 	params: 
