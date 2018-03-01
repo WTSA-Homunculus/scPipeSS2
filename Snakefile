@@ -9,9 +9,9 @@ import os
 # 	(2) featureCounts, (3) salmon
 #  snakemake --cluster "other"
 #  snakemake --cluster "qsub"
-#  snakemake -c 'qsub -V  -q igmm_long -pe sharedmem 8 -l h_vmem=8G -j y -cwd' --jobs=100 >runLog_DATE 2>&1 &
+#  snakemake -c 'qsub -V  -q igmm_long -pe sharedmem 8 -l h_vmem=8G -j y -cwd' --jobs=100
 #############################################################################
-configfile: "siteProfiles/configIGMM.yaml"
+configfile: "siteProfiles/configEBI.yaml"
 configfile: "config.yaml"
 
 
@@ -20,15 +20,20 @@ annotation = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_mm10
 transcriptome = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_mm10']['transcriptome'])
 
 
-BASE_DIR = "/exports/eddie/scratch/jbarang/"
-WKDIR = BASE_DIR + "TEST/" 
+BASE_DIR = "/nfs/leia/research/marioni/mikemorgan/"
+WKDIR = BASE_DIR + "Thymus/"
 
-DIRS = ['Trimmed/','Aligned/','fastqs/QC','FC_QUANT','salmon_QUANT']
+DIRS = ['Trimmed/','Aligned/','fastqs/QC','FC_QUANT','salmon_QUANT', 'temp.dir']
 
 workdir: WKDIR
 
 
 SAMPLES,dummy = glob_wildcards("fastqs/rawdata/{sample}/{sample1}_R1_001.fastq.gz")
+
+#############################################################################
+# Define a set of tasks to run locally
+############################################################################
+localrules: all, dirs
 
 #############################################################################
 # Input Rule
@@ -39,9 +44,9 @@ rule all:
 		expand("fastqs/rawdata/{sample}/{sample}_R1_001.fastq.gz",sample=SAMPLES),
 		expand("fastqs/rawdata/{sample}/{sample}_R2_001.fastq.gz",sample=SAMPLES),
 		expand("fastqs/QC/{sample}_R1_001_fastqc.html",sample=SAMPLES),
-		expand("fastqs/QC/{sample}_R2_001_fastqc.html",sample=SAMPLES),
-		expand("Aligned/{sample}.Aligned.toTranscriptome.out.bam",sample=SAMPLES),
-		expand("salmon_QUANT/{sample}_sf",sample=SAMPLES)
+		expand("fastqs/QC/{sample}_R2_001_fastqc.html",sample=SAMPLES)
+		#expand("Aligned/{sample}.Aligned.sortedByCoord.out.bam",sample=SAMPLES)
+		#expand("salmon_QUANT/{sample}/quant.sf",sample=SAMPLES)
 
 #############################################################################
 # DIR Rule
@@ -58,18 +63,17 @@ rule run_fastqc:
 	Run FastQC to generate a html report with a selection of QC modules
 	"""
 	input:
-		"fastqs/rawdata/{sample}/{sample}_R1_001.fastq.gz",
-		"fastqs/rawdata/{sample}/{sample}_R2_001.fastq.gz"
+		R1="fastqs/rawdata/{sample}/{sample}_R1_001.fastq.gz",
+		R2="fastqs/rawdata/{sample}/{sample}_R2_001.fastq.gz"
 	output:
 		"fastqs/QC/{sample}_R1_001_fastqc.html",
 		"fastqs/QC/{sample}_R2_001_fastqc.html"
 	params:
-		qcEX=config['FQC'],
-		dir='/tmp'
+		qcEX=config['FQC']
 
-	threads: 8
+	threads: 12
 	shell:
-		"{params.qcEX}  -o fastqs/QC/  --noextract  --threads {threads}  --dir {params.dir}  {input}"
+		"{params.qcEX}  -o fastqs/QC/  --noextract  --threads {threads}  --dir temp.dir/  {input}"
 #############################################################################
 # Trim adaptor
 #############################################################################
@@ -84,7 +88,7 @@ rule trim_adaptor:
 	output:
 		R1 = "Trimmed/{sample}_R1_001.fastq.gz",
 		R2 = "Trimmed/{sample}_R2_001.fastq.gz"
-	threads: 8
+	threads: 12
 	params: 
 		trEX=config['TRIM'],
 		trPA=config['Tparam']
@@ -105,7 +109,7 @@ rule star_align:
 		R1="Trimmed/{sample}_R1_001.fastq.gz",
 		R2="Trimmed/{sample}_R2_001.fastq.gz"
 	output:
-		"Aligned/{sample}.Aligned.toTranscriptome.out.bam"
+		"Aligned/{sample}.Aligned.sortedByCoord.out.bam"
 	params:
 		starEX=config['STAR'],
 		prefix = "Aligned/{sample}.",
@@ -114,31 +118,32 @@ rule star_align:
 		outSAMattributes = config['params']['star']['outSAMattributes'],
 		outSAMunmapped = config['params']['star']['outSAMunmapped'],
 		quantMode = config['params']['star']['quantMode']
-	threads: 8
+	threads: 12
 	shell: 
 		"{params.starEX} --runThreadN {threads}  --genomeDir {starIndexPrefix} --readFilesIn {input.R1} {input.R2} --readFilesCommand {params.readFilesCommand} --outFileNamePrefix {params.prefix} --outSAMtype {params.outSAMtype} --outSAMattributes {params.outSAMattributes} --outSAMunmapped {params.outSAMunmapped} --quantMode {params.quantMode} "
+		#	os.system(command)
 
 #############################################################################
 # salmon
 #############################################################################
 rule salmon_counts:
-	input: 
-		bam="Aligned/{sample}.Aligned.toTranscriptome.out.bam" 
-	output: "salmon_QUANT/{sample}_sf"
-	threads: 8
+	input: bam="Aligned/{sample}.Aligned.sortedByCoord.out.bam" 
+	output: "salmon_QUANT/{sample}/quant.sf"
+	threads: 12
 	params: 
 		salEX=config['SALMON'],
-		salStrand="IU"
+		salStrand="IU",
+		anno={transcriptome}
 	shell: """
-		{params.salEX} quant -t {transcriptome} -l {params.salStrand} -p {threads} -a {input.bam} -o {output}
+		{params.salEX} quant -t {anno} -l {params.salStrand} -p {threads} -a {input.bam} -o salmon_QUANT/{sample}
 	"""
 #############################################################################
 # featureCounts
 #############################################################################
 rule feature_counts:
-	input: anno="{annotation}", bam="Aligned/{sample}.Aligned.toTranscriptome.out.bam" 
+	input: anno="{annotation}", bam="Aligned/{sample}.Aligned.sortedByCoord.out.bam" 
 	output: "FC_QUANT/gene_counts.txt"
-	threads: 8
+	threads: 12
 	params: 
 		fcEX=config['FC']
 	shell: """
