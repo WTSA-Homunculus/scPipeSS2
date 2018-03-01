@@ -1,0 +1,14 @@
+{
+    "__default__" :
+    {
+	"queue"     : "research",
+	"nCPUs"     : "10",
+	"threads"   : "8",
+	"memory"    : 10000,
+	"time"      : "00:50:00",
+	"resources" : "\"select[mem>10000] rusage[mem=10000] span[hosts=2]\"",
+	"name"      : "JOBNAME.{rule}.{wildcards}",
+	"output"    : "logs/{rule}.{wildcards}.out",
+	"error"     : "logs/{rule}.{wildcards}.err"
+    }
+}
