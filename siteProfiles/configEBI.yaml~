@@ -6,7 +6,6 @@ Tparam: "ILLUMINACLIP:/exports/igmm/software/pkg/el7/apps/trimmomatic/0.36/adapt
 
 FQC: "/exports/igmm/software/pkg/el7/apps/FastQC/0.11.4/fastqc"
 STAR: "/exports/igmm/software/pkg/el7/apps/STAR/2.5.1b/bin/STAR"
-PICARD: ""
 
 FC: "/exports/igmm/software/pkg/el7/apps/bcbio/1.0.8/share/anaconda/bin/featureCounts"
 SALMON: "/exports/igmm/eddie/ponting-lab/JTB/code/Salmon-0.8.2_linux_x86_64/bin/salmon"

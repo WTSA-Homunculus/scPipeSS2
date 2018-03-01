@@ -23,7 +23,7 @@ transcriptome = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_m
 BASE_DIR = "/nfs/leia/research/marioni/mikemorgan/"
 WKDIR = BASE_DIR + "Thymus/"
 
-DIRS = ['Trimmed/','Aligned/','fastqs/QC','FC_QUANT','salmon_QUANT', 'temp.dir']
+DIRS = ['Trimmed/','Aligned/','fastqs/QC','FC_QUANT','salmon_QUANT', 'temp.dir', 'Dedup.dir']
 
 workdir: WKDIR
 
@@ -124,16 +124,29 @@ rule star_align:
 		#	os.system(command)
 
 #############################################################################
+# Deduplicate positional duplicates with PicardTools
+#############################################################################
+rule dedup_bams:
+    input: bam="Aligned{sample}.Aligned.sortedByCoord.out.bam"
+    output: bam="Dedup.dir/{sample}.dedup.bam",
+            metrics="Dedup.dir/{sample}.metrics.txt"
+    threads: 12
+    params: PicardEX=config['PICARD']
+    shell : """
+            java -jar {params.PicardEX} MarkDuplicates I={input.bam} O={output.bam} M={output.metrics} REMOVE_DUPLICATES=true DUPLICATE_SCORING_STRATEGY=TOTAL_MAPPED_REFERENCE_LENGTH
+            """
+
+#############################################################################
 # salmon
 #############################################################################
 rule salmon_counts:
-	input: bam="Aligned/{sample}.Aligned.sortedByCoord.out.bam" 
+	input: bam="Dedup.dir/{sample}.dedup.bam" 
 	output: "salmon_QUANT/{sample}/quant.sf"
 	threads: 12
 	params: 
 		salEX=config['SALMON'],
 		salStrand="IU",
-		anno={transcriptome}
+		anno=config['ref_mm10']['transcriptome']
 	shell: """
 		{params.salEX} quant -t {anno} -l {params.salStrand} -p {threads} -a {input.bam} -o salmon_QUANT/{sample}
 	"""
@@ -141,7 +154,7 @@ rule salmon_counts:
 # featureCounts
 #############################################################################
 rule feature_counts:
-	input: anno="{annotation}", bam="Aligned/{sample}.Aligned.sortedByCoord.out.bam" 
+	input: anno="{annotation}", bam="Dedup.dir/{sample}.dedup.bam" 
 	output: "FC_QUANT/gene_counts.txt"
 	threads: 12
 	params: 

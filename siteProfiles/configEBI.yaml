@@ -6,6 +6,7 @@ Tparam: "ILLUMINACLIP:/nfs/software/marioni/Trimmomatic-0.36/adapters/TruSeq3-PE
 
 FQC: "/nfs/software/marioni/FastQC/fastqc"
 STAR: "/nfs/software/marioni/STAR-2.5.3a/bin/Linux_x86_64_static/STAR"
+PICARD: "/nfs/software/marioni/picard.jar"
 
 FC: "/nfs/software/marioni/subread-1.6.0-Linux-x86_64/bin/featureCounts"
 SALMON: "/nfs/software/marioni/Salmon-latest_linux_x86_64/bin/salmon"
