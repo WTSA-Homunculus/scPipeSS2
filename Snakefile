@@ -11,7 +11,8 @@ import os
 #  snakemake --cluster "qsub"
 #  snakemake -c 'qsub -V  -q igmm_long -pe sharedmem 8 -l h_vmem=8G -j y -cwd' --jobs=100
 #############################################################################
-configfile: "siteProfiles/configEBI.yaml"
+#configfile: "siteProfiles/configEBI.yaml"
+configfile: "siteProfiles/configIGMM.yaml"
 configfile: "config.yaml"
 
 
@@ -20,7 +21,9 @@ annotation = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_mm10
 transcriptome = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_mm10']['transcriptome'])
 
 
-BASE_DIR = "/nfs/leia/research/marioni/mikemorgan/"
+BASE_DIR = "/exports/eddie/scratch/jbarang/"
+WKDIR = BASE_DIR + "Spine/"
+#BASE_DIR = "/nfs/leia/research/marioni/mikemorgan/"
 WKDIR = BASE_DIR + "Thymus/"
 
 DIRS = ['Trimmed/','Aligned/','fastqs/QC','FC_QUANT','salmon_QUANT', 'temp.dir', 'Dedup.dir']
@@ -44,9 +47,9 @@ rule all:
 		expand("fastqs/rawdata/{sample}/{sample}_R1_001.fastq.gz",sample=SAMPLES),
 		expand("fastqs/rawdata/{sample}/{sample}_R2_001.fastq.gz",sample=SAMPLES),
 		expand("fastqs/QC/{sample}_R1_001_fastqc.html",sample=SAMPLES),
-		expand("fastqs/QC/{sample}_R2_001_fastqc.html",sample=SAMPLES)
-		#expand("Aligned/{sample}.Aligned.sortedByCoord.out.bam",sample=SAMPLES)
-		#expand("salmon_QUANT/{sample}/quant.sf",sample=SAMPLES)
+		expand("fastqs/QC/{sample}_R2_001_fastqc.html",sample=SAMPLES),
+		expand("Aligned/{sample}.Aligned.sortedByCoord.out.bam",sample=SAMPLES),
+		expand("salmon_QUANT/{sample}/quant.sf",sample=SAMPLES)
 
 #############################################################################
 # DIR Rule
@@ -121,13 +124,12 @@ rule star_align:
 	threads: 12
 	shell: 
 		"{params.starEX} --runThreadN {threads}  --genomeDir {starIndexPrefix} --readFilesIn {input.R1} {input.R2} --readFilesCommand {params.readFilesCommand} --outFileNamePrefix {params.prefix} --outSAMtype {params.outSAMtype} --outSAMattributes {params.outSAMattributes} --outSAMunmapped {params.outSAMunmapped} --quantMode {params.quantMode} "
-		#	os.system(command)
 
 #############################################################################
 # Deduplicate positional duplicates with PicardTools
 #############################################################################
 rule dedup_bams:
-    input: bam="Aligned{sample}.Aligned.sortedByCoord.out.bam"
+    input: bam="Aligned/{sample}.Aligned.sortedByCoord.out.bam"
     output: bam="Dedup.dir/{sample}.dedup.bam",
             metrics="Dedup.dir/{sample}.metrics.txt"
     threads: 12
