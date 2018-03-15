@@ -20,10 +20,10 @@ annotation = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_mm10
 transcriptome = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_mm10']['transcriptome'])
 
 
-BASE_DIR = "/nfs/leia/research/marioni/mikemorgan/"
+BASE_DIR = "/nfs/research1/marioni/mdmorgan/"
 WKDIR = BASE_DIR + "Thymus/"
 
-DIRS = ['Trimmed/','Aligned/','fastqs/QC','FC_QUANT','salmon_QUANT', 'temp.dir', 'Dedup.dir']
+DIRS = ['Trimmed/','Aligned/','fastqs/QC','FC_QUANT','salmon_QUANT', 'Dedup.dir']
 
 workdir: WKDIR
 
@@ -33,7 +33,7 @@ SAMPLES,dummy = glob_wildcards("fastqs/rawdata/{sample}/{sample1}_R1_001.fastq.g
 #############################################################################
 # Define a set of tasks to run locally
 ############################################################################
-localrules: all, dirs
+#localrules: all, dirs
 
 #############################################################################
 # Input Rule
@@ -44,8 +44,11 @@ rule all:
 		expand("fastqs/rawdata/{sample}/{sample}_R1_001.fastq.gz",sample=SAMPLES),
 		expand("fastqs/rawdata/{sample}/{sample}_R2_001.fastq.gz",sample=SAMPLES),
 		expand("fastqs/QC/{sample}_R1_001_fastqc.html",sample=SAMPLES),
-		expand("fastqs/QC/{sample}_R2_001_fastqc.html",sample=SAMPLES)
-		#expand("Aligned/{sample}.Aligned.sortedByCoord.out.bam",sample=SAMPLES)
+		expand("fastqs/QC/{sample}_R2_001_fastqc.html",sample=SAMPLES),
+		expand("Aligned/{sample}.Aligned.sortedByCoord.out.bam",sample=SAMPLES),
+                expand("Dedup.dir/{sample}.dedup.bam",sample=SAMPLES),
+		expand("FC_QUANT/{sample}.gene_counts.txt",sample=SAMPLES),
+		"FC_QUANT/Merged_counts.txt"
 		#expand("salmon_QUANT/{sample}/quant.sf",sample=SAMPLES)
 
 #############################################################################
@@ -73,7 +76,7 @@ rule run_fastqc:
 
 	threads: 12
 	shell:
-		"{params.qcEX}  -o fastqs/QC/  --noextract  --threads {threads}  --dir temp.dir/  {input}"
+		"{params.qcEX}  -o fastqs/QC/  --noextract  --threads {threads}  {input}"
 #############################################################################
 # Trim adaptor
 #############################################################################
@@ -127,7 +130,7 @@ rule star_align:
 # Deduplicate positional duplicates with PicardTools
 #############################################################################
 rule dedup_bams:
-    input: bam="Aligned{sample}.Aligned.sortedByCoord.out.bam"
+    input: bam="Aligned/{sample}.Aligned.sortedByCoord.out.bam"
     output: bam="Dedup.dir/{sample}.dedup.bam",
             metrics="Dedup.dir/{sample}.metrics.txt"
     threads: 12
@@ -154,12 +157,24 @@ rule salmon_counts:
 # featureCounts
 #############################################################################
 rule feature_counts:
-	input: anno="{annotation}", bam="Dedup.dir/{sample}.dedup.bam" 
-	output: "FC_QUANT/gene_counts.txt"
+	input: anno=config['ref_mm10']['annotation'], bam="Dedup.dir/{sample}.dedup.bam" 
+	output: "FC_QUANT/{sample}.gene_counts.txt"
 	threads: 12
 	params: 
 		fcEX=config['FC']
 	shell: """
 		{params.fcEX} -p -s 0 -T {threads} -t exon -g gene_id -a {input.anno} -o {output[0]} {input.bam} &> {output[0]}.log
 	"""
+
+#############################################################################
+# Merge gene counts
+#############################################################################
+rule merge_counts:
+     input: counts=expand("FC_QUANT/{sample}.gene_counts.tx", sample=SAMPLES)
+     output: "FC_QUANT/Merged_counts.txt"
+     threads: 1
+     
+     script: """
+     scripts/merge_counts.py {input.counts} > {output[0]} &> {output[0]}.log
+     """
 
