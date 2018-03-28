@@ -11,8 +11,7 @@ import os
 #  snakemake --cluster "qsub"
 #  snakemake -c 'qsub -V  -q igmm_long -pe sharedmem 8 -l h_vmem=8G -j y -cwd' --jobs=100
 #############################################################################
-#configfile: "siteProfiles/configEBI.yaml"
-configfile: "siteProfiles/configIGMM.yaml"
+configfile: "siteProfiles/configEBI.yaml"
 configfile: "config.yaml"
 
 
@@ -20,8 +19,8 @@ starIndexPrefix = os.path.join(config['ref_mm10']['referenceFolder'],config['ref
 annotation = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_mm10']['annotation'])
 transcriptome = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_mm10']['transcriptome'])
 
+
 BASE_DIR = "/nfs/research1/marioni/mdmorgan/"
-#BASE_DIR = "/nfs/leia/research/marioni/mikemorgan/"
 WKDIR = BASE_DIR + "Thymus/"
 
 DIRS = ['Trimmed/','Aligned/','fastqs/QC','FC_QUANT','salmon_QUANT', 'Dedup.dir']
@@ -125,6 +124,7 @@ rule star_align:
 	threads: 12
 	shell: 
 		"{params.starEX} --runThreadN {threads}  --genomeDir {starIndexPrefix} --readFilesIn {input.R1} {input.R2} --readFilesCommand {params.readFilesCommand} --outFileNamePrefix {params.prefix} --outSAMtype {params.outSAMtype} --outSAMattributes {params.outSAMattributes} --outSAMunmapped {params.outSAMunmapped} --quantMode {params.quantMode} "
+		#	os.system(command)
 
 #############################################################################
 # Deduplicate positional duplicates with PicardTools
@@ -169,12 +169,23 @@ rule feature_counts:
 #############################################################################
 # Merge gene counts
 #############################################################################
+# there is a limit to how much can be passed to a single file
+# all we need is a comma-separated list of files, not the space separated one that snakemake generates
+# too many files breaks the POSIX file argument limit
+# need just an input directory to glob the files from as the rule input
+def merge_inputs(wildcards):
+    files = expand("FC_QUANT/{sample}.gene_counts.txt", sample=SAMPLES)
+    sep_files = ",".join(files)
+    return sep_files
+
 rule merge_counts:
-     input: counts=expand("FC_QUANT/{sample}.gene_counts.tx", sample=SAMPLES)
+     input: directory="FC_QUANT"
+     params: regex="gene_counts.txt$"
      output: "FC_QUANT/Merged_counts.txt"
+     log: "logs/quant_merge.log"
      threads: 1
      
      script: """
-     scripts/merge_counts.py {input.counts} > {output[0]} &> {output[0]}.log
+     scripts/merge_counts.py --input-directory={input.directory}  --file-regex={params.regex} > {output[0]} &> {output[0]}.log
      """
 
