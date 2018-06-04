@@ -1,4 +1,4 @@
-# this script merges the results from featureCounts in to a single gene X cell counts matrix
+# this script merges the results from featureCounts or Salmon in to a single gene X cell counts matrix
 
 """
 Merge count tables for genes for multiple samples into a gene X single cell/sample counts matrix
@@ -33,15 +33,26 @@ parser.add_argument("--file-regex", dest="file_regex", type=str,
                     help="Regular expression to match to input files. Accepts "
                     "normal regular expression syntax")
 
+parser.add_argument("--input-format", dest="in_format", type=str,
+                    choices=["salmon", "feature"],
+                    default="feature",
+                    help="input file format, should be either feature or salmon")
+
 args = parser.parse_args()
 
-# can't take thousands of input files because posix has a limiti to the
+# can't take thousands of input files because posix has a limit to the
 # character limit of an argument to a script
 # need to pass an input directory and a glob/regex instead
 # could be a problem for snakemake to handle?
 reg_compile = re.compile(args.file_regex)
-found_files = [ft for ft in os.listdir(args.input_dir) if re.search(reg_compile, ft)]
-input_files = [os.path.join(args.input_dir, fx) for fx in found_files]
+if args.in_format == "feature":
+    found_files = [ft for ft in os.listdir(args.input_dir) if re.search(reg_compile, ft)]
+    input_files = [os.path.join(args.input_dir, fx) for fx in found_files]
+elif args.in_format == "salmon":
+    found_files = [ft for ft in os.listdir(args.input_dir) if re.search(reg_compile, os.path.join(ft, "quant.sf"))]
+    input_files = [os.path.join(args.input_dir, fx, "quant.sf/quant.sf") for fx in found_files]
+else:
+    raise ValueError("Did not recognize input format.  Should be either 'feature' or 'salmon'")
 #input_files = sys.argv[-1].split(",")
 
 logging.info("Found {} count files to merge".format(len(input_files)))
@@ -53,26 +64,39 @@ logging.info("Found {} count files to merge".format(len(input_files)))
 
 n_files = 0
 for cfile in input_files:
-    fname = cfile.split("/")[-1]
-    samp_name = fname.split(".")[:-2]
+    if args.in_format == "feature":
+        fname = cfile.split("/")[-1]
+        samp_name = fname.split(".")[:-2]
+    elif args.in_format == "salmon":
+        fname = cfile.split("/")[-3]
+        samp_name = ".".join(fname.split("-")[:-2])
     if n_files == 0:
         count_df = pd.read_table(cfile, sep="\t", header=0, index_col=None, 
                                  comment='#')
+        if args.in_format == "salmon":
+            count_df = count_df.loc[:, ["Name", "Length", "EffectiveLength", "NumReads"]]
         columns = list(count_df.columns[:-1])
-        columns.append(samp_name[0])
+        columns.append(samp_name)
         count_df.columns = columns
         n_files += 1
     else:
         _df = pd.read_table(cfile, sep="\t", header=0, index_col=None, 
                                  comment='#')
+        if args.in_format == "salmon":
+            _df = _df.loc[:, ["Name", "Length", "EffectiveLength", "NumReads"]]
         columns = list(_df.columns[:-1])
-        columns.append(samp_name[0])
+        columns.append(samp_name)
         _df.columns = columns
         n_files += 1
         # merge
-        count_df = pd.merge(count_df, _df,
-                            left_on=["Geneid", "Chr", "Start", "End", "Strand", "Length"],
-                            right_on=["Geneid", "Chr", "Start", "End", "Strand", "Length"])
+        if args.in_format == "feature":
+            count_df = pd.merge(count_df, _df,
+                                left_on=["Geneid", "Chr", "Start", "End", "Strand", "Length"],
+                                right_on=["Geneid", "Chr", "Start", "End", "Strand", "Length"])
+        elif args.in_format == "salmon":
+            count_df = pd.merge(count_df, _df,
+                                left_on=["Name", "Length", "EffectiveLength"],
+                                right_on=["Name", "Length", "EffectiveLength"])
         if not n_files % 100:
             logging.info("Processed {} count files".format(n_files))
 

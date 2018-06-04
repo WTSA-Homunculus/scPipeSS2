@@ -27,7 +27,6 @@ DIRS = ['Trimmed/','Aligned/','fastqs/QC','FC_QUANT','salmon_QUANT', 'Dedup.dir'
 
 workdir: WKDIR
 
-
 SAMPLES,dummy = glob_wildcards("fastqs/rawdata/{sample}/{sample1}_R1_001.fastq.gz")
 
 #############################################################################
@@ -46,10 +45,12 @@ rule all:
 		expand("fastqs/QC/{sample}_R1_001_fastqc.html",sample=SAMPLES),
 		expand("fastqs/QC/{sample}_R2_001_fastqc.html",sample=SAMPLES),
 		expand("Aligned/{sample}.Aligned.sortedByCoord.out.bam",sample=SAMPLES),
+		expand("Aligned/{sample}.Aligned.toTranscriptome.out.bam",sample=SAMPLES),
                 expand("Dedup.dir/{sample}.dedup.bam",sample=SAMPLES),
+		#expand("Dedup.dir/{sample}.Transcriptome.dedup.bam",sample=SAMPLES),
 		expand("FC_QUANT/{sample}.gene_counts.txt",sample=SAMPLES),
-		"FC_QUANT/Merged_counts.txt"
-		#expand("salmon_QUANT/{sample}/quant.sf",sample=SAMPLES)
+		"FC_QUANT/Merged_counts.txt",
+		expand("salmon_QUANT/{sample}",sample=SAMPLES)
 
 #############################################################################
 # DIR Rule
@@ -104,6 +105,7 @@ rule trim_adaptor:
 	# is this a job for conda?  Could we deploy this pipeline as a conda environment, that way we can
 	# control the paths to software binaries...
 		"""java -jar {params.trEX} PE -threads {threads} -phred33 {input.R1} {input.R2} {output.R1} {output.R1}.unpaired {output.R2} {output.R2}.unpaired {params.trPA}"""
+
 #############################################################################
 # Align Rule
 #############################################################################
@@ -123,8 +125,10 @@ rule star_align:
 		quantMode = config['params']['star']['quantMode']
 	threads: 12
 	shell: 
-		"{params.starEX} --runThreadN {threads}  --genomeDir {starIndexPrefix} --readFilesIn {input.R1} {input.R2} --readFilesCommand {params.readFilesCommand} --outFileNamePrefix {params.prefix} --outSAMtype {params.outSAMtype} --outSAMattributes {params.outSAMattributes} --outSAMunmapped {params.outSAMunmapped} --quantMode {params.quantMode} "
-		#	os.system(command)
+		"""
+		{params.starEX} --runThreadN {threads}  --genomeDir {starIndexPrefix} --readFilesIn {input.R1} {input.R2} --readFilesCommand {params.readFilesCommand} --outFileNamePrefix {params.prefix} --outSAMtype {params.outSAMtype} 
+		--outSAMattributes {params.outSAMattributes} --outSAMunmapped {params.outSAMunmapped} --quantMode {params.quantMode}
+		"""
 
 #############################################################################
 # Deduplicate positional duplicates with PicardTools
@@ -140,24 +144,43 @@ rule dedup_bams:
             """
 
 #############################################################################
+# Deduplicate BAM files aligned to the transcriptome - bams need to be sorted
+#############################################################################
+## Probably need a separate step to do sorting of transcriptome bams before deduping
+## or need to convert this to a separate function that runs the sorting into a temp file
+## before deduplication
+
+#rule dedup_transcriptome:
+#     input: bam="Aligned/{sample}.Aligned.toTranscriptome.out.bam"
+#     output: bam="Dedup.dir/{sample}.Transcriptome.dedup.bam",
+#     	     metrics="Dedup.dir/{sample}.Transcriptome.metrics.txt"     
+#     threads: 12
+#     params: PicardEX=config['PICARD']
+#     shell : """
+#     	     mkfifo {input.bam}
+#     	     java -jar {params.PicardEX} MarkDuplicates I={input.bam} O={output.bam}  M={output.metrics}  REMOVE_DUPLICATES=true DUPLICATE_SCORING_STRATEGY=TOTAL_MAPPED_REFERENCE_LENGTH
+#     	     """
+
+#############################################################################
 # salmon
 #############################################################################
 rule salmon_counts:
-	input: bam="Dedup.dir/{sample}.dedup.bam" 
-	output: "salmon_QUANT/{sample}/quant.sf"
+	input: bam="Aligned/{sample}.Aligned.toTranscriptome.out.bam" 
+	output: "salmon_QUANT/{sample}"
 	threads: 12
 	params: 
 		salEX=config['SALMON'],
 		salStrand="IU",
 		anno=config['ref_mm10']['transcriptome']
 	shell: """
-		{params.salEX} quant -t {anno} -l {params.salStrand} -p {threads} -a {input.bam} -o salmon_QUANT/{sample}
+		{params.salEX} quant -t {params.anno} -l {params.salStrand} -p {threads} -a {input.bam} -o {output}/quant.sf
 	"""
 #############################################################################
 # featureCounts
 #############################################################################
 rule feature_counts:
-	input: anno=config['ref_mm10']['annotation'], bam="Dedup.dir/{sample}.dedup.bam" 
+	input: anno=config['ref_mm10']['annotation'], 
+	       bam="Dedup.dir/{sample}.dedup.bam" 
 	output: "FC_QUANT/{sample}.gene_counts.txt"
 	threads: 12
 	params: 
@@ -186,6 +209,30 @@ rule merge_counts:
      threads: 1
      
      script: """
-     scripts/merge_counts.py --input-directory={input.directory}  --file-regex={params.regex} > {output[0]} &> {output[0]}.log
+     python scripts/merge_counts.py --input-directory={input.directory} --input-format=feature --file-regex={params.regex} > {output[0]} &> {output[0]}.log
      """
 
+#################################################################################
+# Merge Salmon counts 
+#################################################################################
+# adapt the merge counts script to handle the salmon input files
+
+rule merge_salmon:
+     input: directory="salmon_QUANT"
+     params: regex="quant.sf$"
+     output: "salmon_QUANT/Merged_Salmon_counts.txt"
+     log: "logs/merge_salmon_counts.log"
+     threads: 1
+
+     script: """
+     python scripts/merge_counts.py --input-directory={input.directory} --input-format=salmon --file-regex={params.regex} > {output[0]} &> {output[0]}.log
+     """
+
+
+
+#################################################################################
+# RNA Velocity estimation
+#################################################################################
+# ideally this would use the Python CLI to do the counts estimation for the 
+# spliced and unspliced reads, however, it only works on droplet-data
+# Apparently, the R code can work on SMART-Seq2 bam files.
