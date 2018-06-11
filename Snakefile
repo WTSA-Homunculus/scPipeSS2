@@ -14,7 +14,6 @@ import os
 configfile: "siteProfiles/configEBI.yaml"
 configfile: "config.yaml"
 
-
 starIndexPrefix = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_mm10']['starIndex'])
 annotation = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_mm10']['annotation'])
 transcriptome = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_mm10']['transcriptome'])
@@ -23,7 +22,8 @@ transcriptome = os.path.join(config['ref_mm10']['referenceFolder'],config['ref_m
 BASE_DIR = "/nfs/research1/marioni/mdmorgan/"
 WKDIR = BASE_DIR + "Thymus/"
 
-DIRS = ['Trimmed/','Aligned/','fastqs/QC','FC_QUANT','salmon_QUANT', 'Dedup.dir']
+DIRS = ['Trimmed/','Aligned/','fastqs/QC','FC_QUANT','salmon_QUANT', 'Dedup.dir', 'Quant.dir', 
+          'CAGE_Quant/']
 
 workdir: WKDIR
 
@@ -49,8 +49,14 @@ rule all:
                 expand("Dedup.dir/{sample}.dedup.bam",sample=SAMPLES),
 		#expand("Dedup.dir/{sample}.Transcriptome.dedup.bam",sample=SAMPLES),
 		expand("FC_QUANT/{sample}.gene_counts.txt",sample=SAMPLES),
-		"FC_QUANT/Merged_counts.txt",
-		expand("salmon_QUANT/{sample}",sample=SAMPLES)
+		expand("FC_QUANT/{sample}.exon_counts.txt", sample=SAMPLES),
+		"Quant.dir/Merged_counts.txt",
+		"Quant.dir/Merged_exon_counts.txt",
+		expand("salmon_QUANT/{sample}",sample=SAMPLES),
+		"Quant.dir/Merged_Salmon_counts.txt"
+		#"CAGE_Quant/{sample}.CAGE_counts.txt",
+		#"Quant.dir/Merged_CAGE_counts.txt"
+		
 
 #############################################################################
 # DIR Rule
@@ -176,7 +182,7 @@ rule salmon_counts:
 		{params.salEX} quant -t {params.anno} -l {params.salStrand} -p {threads} -a {input.bam} -o {output}/quant.sf
 	"""
 #############################################################################
-# featureCounts
+# featureCounts - genes
 #############################################################################
 rule feature_counts:
 	input: anno=config['ref_mm10']['annotation'], 
@@ -187,6 +193,21 @@ rule feature_counts:
 		fcEX=config['FC']
 	shell: """
 		{params.fcEX} -p -s 0 -T {threads} -t exon -g gene_id -a {input.anno} -o {output[0]} {input.bam} &> {output[0]}.log
+	"""
+
+#############################################################################
+# featureCounts - exons
+#############################################################################
+# count at exon level for differential exon usage
+
+rule feature_exon_counts:
+        input: anno=config['ref_mm10']['annotation'],
+               bam="Dedup.dir/{sample}.dedup.bam"
+        output: "FC_QUANT/{sample}.exon_counts.txt"
+        threads: 12
+        params: fcEX=config['FC']
+	shell: """
+        {params.fcEX} -p -s 0 -T {threads} -t exon -g exon -a {input.anno} -o {output[0]} {input.bam} &> {output[0]}.log
 	"""
 
 #############################################################################
@@ -204,10 +225,33 @@ def merge_inputs(wildcards):
 rule merge_counts:
      input: directory="FC_QUANT"
      params: regex="gene_counts.txt$"
-     output: "FC_QUANT/Merged_counts.txt"
+     output: "Quant.dir/Merged_counts.txt"
      log: "logs/quant_merge.log"
      threads: 1
      
+     script: """
+     python scripts/merge_counts.py --input-directory={input.directory} --input-format=feature --file-regex={params.regex} > {output[0]} &> {output[0]}.log
+     """
+
+#############################################################################
+# Merge exon counts
+#############################################################################
+# there is a limit to how much can be passed to a single file
+# all we need is a comma-separated list of files, not the space separated one that snakemake generates
+# too many files breaks the POSIX file argument limit
+# need just an input directory to glob the files from as the rule input
+def merge_inputs(wildcards):
+    files = expand("FC_QUANT/{sample}.exon_counts.txt", sample=SAMPLES)
+    sep_files = ",".join(files)
+    return sep_files
+
+rule merge_exon_counts:
+     input: directory="FC_QUANT"
+     params: regex="exon_counts.txt$"
+     output: "Quant.dir/Merged_exon_counts.txt"
+     log: "logs/Exon_quant_merge.log"
+     threads: 1
+
      script: """
      python scripts/merge_counts.py --input-directory={input.directory} --input-format=feature --file-regex={params.regex} > {output[0]} &> {output[0]}.log
      """
@@ -220,7 +264,7 @@ rule merge_counts:
 rule merge_salmon:
      input: directory="salmon_QUANT"
      params: regex="quant.sf$"
-     output: "salmon_QUANT/Merged_Salmon_counts.txt"
+     output: "Quant.dir/Merged_Salmon_counts.txt"
      log: "logs/merge_salmon_counts.log"
      threads: 1
 
@@ -228,7 +272,35 @@ rule merge_salmon:
      python scripts/merge_counts.py --input-directory={input.directory} --input-format=salmon --file-regex={params.regex} > {output[0]} &> {output[0]}.log
      """
 
+#################################################################################
+# Quantify against FANTOM5 CAGE peaks - mark TSS usage per cell
+#################################################################################
+# provide an input GTF file of CAGE peaks - add annotattion to ensembl genes later
 
+rule count_CAGE:
+     input: anno=config['ref_mm10']['cage'],
+     	    bam="Dedup.dir/{sample}.dedup.bam"
+     output: "CAGE_Quant/{sample}.CAGE_counts.txt"
+     threads: 12
+     params: fcEX=config['FC']
+     shell: """
+     {params.fcEX} -p -s 0 -T {threads} -t exon -g gene_id -a {input.anno} -o {output[0]} {input.bam} &> {output[0]}.log
+     """
+
+#############################################################################
+# Merge CAGE peak counts
+#############################################################################
+
+rule merge_cage_counts:
+     input: directory="CAGE_Quant"
+     params: regex="CAGE_counts.txt$"
+     output: "Quant.dir/Merged_CAGE_counts.txt"
+     log: "logs/CAGE_quant_merge.log"
+     threads: 1
+
+     script: """
+     python scripts/merge_counts.py --input-directory={input.directory} --input-format=feature --file-regex={params.regex} > {output[0]} &> {output[0]}.log
+     """
 
 #################################################################################
 # RNA Velocity estimation
